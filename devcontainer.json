@@ -1,0 +1,6 @@
+{
+  "name": "API Minecraft",
+  "image": "mcr.microsoft.com/vscode/devcontainers/python:3.11",
+  "forwardPorts": [8080],
+  "postStartCommand": "python3 /workspaces/servidor/api.py"
+}
