@@ -1,70 +1,81 @@
+from flask import Flask, request, jsonify
 import os
 import requests
-from flask import Flask, jsonify
-from flask_cors import CORS
 import time
 
 app = Flask(__name__)
-CORS(app)  # Permite que seu site chame a API
 
-# Pega o token do GitHub da variável de ambiente
+# Token do GitHub (variável de ambiente no Railway)
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-REPO = "TNTKAWAN73813/servidor"
-BRANCH = "main"
+CODESPACE_NAME = "servidor"  # o nome do Codespace no GitHub
+REPO = "TNTKAWAN73813/servidor"  # seu repo
 
-# Tempo de espera para o Codespace iniciar (segundos)
-WAIT_SECONDS = 20
+# URL da NLS dentro do Codespace
+NLS_URL = "https://fuzzy-potato-x54rxp4499wrh9q7v-8080.app.github.dev/"  # exemplo, ajustar conforme NLS
 
-@app.post("/start-codespace")
+
+def is_codespace_running():
+    """Verifica se o Codespace está ativo via API GitHub"""
+    url = f"https://api.github.com/user/codespaces"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        return False
+    codespaces = response.json().get("codespaces", [])
+    for cs in codespaces:
+        if cs["repository"]["full_name"] == REPO:
+            if cs["state"] == "Available":
+                return True
+    return False
+
+
 def start_codespace():
-    """Inicia o Codespace usando GitHub API"""
-    if not GITHUB_TOKEN:
-        return jsonify({"success": False, "error": "Token não configurado"}), 500
-
-    url = "https://api.github.com/user/codespaces"
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github+json"
-    }
+    """Liga o Codespace via GitHub API"""
+    url = f"https://api.github.com/user/codespaces"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     data = {
-        "repository": REPO,
-        "ref": BRANCH
+        "repository": REPO
     }
+    response = requests.post(url, json=data, headers=headers)
+    return response.status_code == 201 or response.status_code == 200
 
+
+def call_nls():
+    """Chama a NLS dentro do Codespace para iniciar Minecraft + túnel"""
     try:
-        resp = requests.post(url, headers=headers, json=data)
-        if resp.status_code in [200, 201]:
-            # Opcional: esperar alguns segundos para o Codespace iniciar
-            time.sleep(WAIT_SECONDS)
-            return jsonify({"success": True, "message": "Codespace iniciado!"})
+        res = requests.post(NLS_URL, timeout=10)
+        if res.status_code == 200:
+            return res.json()
         else:
-            return jsonify({"success": False, "error": resp.json()})
+            return {"running": False, "error": "NLS retornou erro"}
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+        return {"running": False, "error": str(e)}
 
-@app.get("/status-codespace")
-def status_codespace():
-    """Retorna status dos Codespaces existentes no repositório"""
-    if not GITHUB_TOKEN:
-        return jsonify({"success": False, "error": "Token não configurado"}), 500
 
-    url = f"https://api.github.com/repos/{REPO}/codespaces"
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github+json"
-    }
+@app.route("/start-codespace", methods=["POST"])
+def start():
+    # Verifica se o Codespace já está ligado
+    if not is_codespace_running():
+        started = start_codespace()
+        if not started:
+            return jsonify({"success": False, "error": "Falha ao iniciar Codespace"})
 
-    try:
-        resp = requests.get(url, headers=headers)
-        if resp.status_code == 200:
-            data = resp.json()
-            running = len(data.get("codespaces", [])) > 0
-            return jsonify({"success": True, "running": running, "codespaces": data.get("codespaces", [])})
+        # Aguardar Codespace ficar disponível
+        for _ in range(30):  # até 150s
+            time.sleep(5)
+            if is_codespace_running():
+                break
         else:
-            return jsonify({"success": False, "error": resp.json()})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+            return jsonify({"success": False, "error": "Timeout Codespace"})
+
+    # Chama a NLS
+    nls_status = call_nls()
+
+    return jsonify({
+        "success": True,
+        "server_info": nls_status
+    })
+
 
 if __name__ == "__main__":
-    # Porta 100% compatível com Render
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=8080)
