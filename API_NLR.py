@@ -1,11 +1,12 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
-import requests
-import os
+import subprocess
 import time
+import re
+import os
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})  # ✅ libera acesso de qualquer origem
 
 # ⚙️ Configurações
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
