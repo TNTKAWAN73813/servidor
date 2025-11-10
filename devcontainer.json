@@ -9,5 +9,5 @@
       "visibility": "public"
     }
   },
-  "postStartCommand": "python3 /workspaces/servidor/api.py"
+  "postStartCommand": "python3 /workspaces/servidor/minecraft/API-NLS.py"
 }
