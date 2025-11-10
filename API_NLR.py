@@ -10,7 +10,7 @@ CORS(app)
 # Configurações
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 CODESPACE_NAME = "fuzzy-potato-x54rxp4499wrh9q7v"  # nome do seu Codespace
-NLS_URL = "https://fuzzy-potato-x54rxp4499wrh9q7v-8080.app.github.dev/"   # URL interna da NLS dentro do Codespace
+NLS_URL = "https://fuzzy-potato-x54rxp4499wrh9q7v-8080.app.github.dev"   # URL interna da NLS dentro do Codespace
 
 HEADERS = {
     "Authorization": f"token {GITHUB_TOKEN}",
