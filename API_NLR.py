@@ -7,37 +7,30 @@ import time
 app = Flask(__name__)
 CORS(app)
 
-# Configurações
+# ⚙️ Configurações
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-CODESPACE_NAME = "fuzzy-potato-x54rxp4499wrh9q7v"  # nome do seu Codespace
-NLS_URL = "https://fuzzy-potato-x54rxp4499wrh9q7v-8080.app.github.dev"   # URL interna da NLS dentro do Codespace
+CODESPACE_NAME = "fuzzy-potato-x54rxp4499wrh9q7v"  # nome exato do seu Codespace
+NLS_URL = "https://fuzzy-potato-x54rxp4499wrh9q7v-8080.app.github.dev"  # URL do NLS dentro do Codespace
 
 HEADERS = {
     "Authorization": f"token {GITHUB_TOKEN}",
     "Accept": "application/vnd.github+json"
 }
 
+
 def start_codespace_and_nls():
-    # 1️⃣ Liga o Codespace
+    # 1️⃣ Liga o Codespace pelo GitHub API
     start_url = f"https://api.github.com/user/codespaces/{CODESPACE_NAME}/start"
     r = requests.post(start_url, headers=HEADERS)
     if r.status_code not in (200, 201, 204):
         return False, r.json()
 
-    # 2️⃣ Espera o Codespace ficar pronto
-    time.sleep(15)  # ajustar se necessário
+    # 2️⃣ Espera alguns segundos até o Codespace iniciar e rodar o NLS
+    time.sleep(20)
 
-    # 3️⃣ Executa comando dentro do Codespace para iniciar a NLS
-    exec_url = f"https://api.github.com/user/codespaces/{CODESPACE_NAME}/commands"
-    data = {
-        "command": "bash /workspaces/servidor/start_nls.sh"
-    }
-    r2 = requests.post(exec_url, headers=HEADERS, json=data)
-    if r2.status_code not in (200, 201):
-        return False, r2.json()
-
-    # 4️⃣ Retorna sucesso e URL da NLS
+    # 3️⃣ Retorna a URL da NLS (que já estará rodando)
     return True, {"nls_url": NLS_URL}
+
 
 @app.post("/start-codespace")
 def start_codespace_endpoint():
@@ -49,6 +42,12 @@ def start_codespace_endpoint():
         return jsonify({"success": True, "nls_url": info["nls_url"]})
     else:
         return jsonify({"success": False, "error": info})
+
+
+@app.get("/")
+def home():
+    return jsonify({"status": "ok", "message": "API-NLR ativa!"})
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
