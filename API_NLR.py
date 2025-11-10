@@ -1,58 +1,70 @@
-from flask import Flask, jsonify
-import subprocess
+import os
 import requests
+from flask import Flask, jsonify
+from flask_cors import CORS
 import time
 
 app = Flask(__name__)
+CORS(app)  # Permite que seu site chame a API
 
-# Configurações
-CODESPACE_API = "https://servidor-or05.onrender.com/start-server"
-CODESPACE_STATUS_API = "https://fuzzy-potato-x54rxp4499wrh9q7v-8080.app.github.dev/status"
-CODESPACE_START_CMD = "gh codespace start -R SEU_USUARIO/SEU_REPOSITORIO"
-MAX_WAIT_SECONDS = 60
-CHECK_INTERVAL = 5
+# Pega o token do GitHub da variável de ambiente
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+REPO = "TNTKAWAN73813/servidor"
+BRANCH = "main"
 
-@app.route("/start-codespace", methods=["POST"])
+# Tempo de espera para o Codespace iniciar (segundos)
+WAIT_SECONDS = 20
+
+@app.post("/start-codespace")
 def start_codespace():
-    # Verifica se Codespace já está online
+    """Inicia o Codespace usando GitHub API"""
+    if not GITHUB_TOKEN:
+        return jsonify({"success": False, "error": "Token não configurado"}), 500
+
+    url = "https://api.github.com/user/codespaces"
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json"
+    }
+    data = {
+        "repository": REPO,
+        "ref": BRANCH
+    }
+
     try:
-        status_res = requests.get(CODESPACE_STATUS_API, timeout=3)
-        status_res.raise_for_status()
-        status = status_res.json()
-        if status.get("running"):
-            # Minecraft já rodando, retorna info
-            return jsonify({"success": True, "server_info": status})
-    except requests.exceptions.RequestException:
-        pass  # Codespace desligado, precisa ligar
-
-    # Liga Codespace
-    try:
-        subprocess.run(CODESPACE_START_CMD, shell=True, check=True)
-    except subprocess.CalledProcessError:
-        return jsonify({"success": False, "error": "Falha ao iniciar Codespace"}), 500
-
-    # Espera Codespace ficar online
-    start_time = time.time()
-    while True:
-        try:
-            status_res = requests.get(CODESPACE_STATUS_API, timeout=3)
-            if status_res.status_code == 200:
-                break
-        except requests.exceptions.RequestException:
-            pass
-
-        if time.time() - start_time > MAX_WAIT_SECONDS:
-            return jsonify({"success": False, "error": "Timeout ao esperar Codespace"}), 504
-
-        time.sleep(CHECK_INTERVAL)
-
-    # Chama NLS para iniciar Minecraft
-    try:
-        start_res = requests.post(CODESPACE_API, timeout=10)
-        server_info = start_res.json()
-        return jsonify({"success": True, "server_info": server_info})
+        resp = requests.post(url, headers=headers, json=data)
+        if resp.status_code in [200, 201]:
+            # Opcional: esperar alguns segundos para o Codespace iniciar
+            time.sleep(WAIT_SECONDS)
+            return jsonify({"success": True, "message": "Codespace iniciado!"})
+        else:
+            return jsonify({"success": False, "error": resp.json()})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)})
+
+@app.get("/status-codespace")
+def status_codespace():
+    """Retorna status dos Codespaces existentes no repositório"""
+    if not GITHUB_TOKEN:
+        return jsonify({"success": False, "error": "Token não configurado"}), 500
+
+    url = f"https://api.github.com/repos/{REPO}/codespaces"
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json"
+    }
+
+    try:
+        resp = requests.get(url, headers=headers)
+        if resp.status_code == 200:
+            data = resp.json()
+            running = len(data.get("codespaces", [])) > 0
+            return jsonify({"success": True, "running": running, "codespaces": data.get("codespaces", [])})
+        else:
+            return jsonify({"success": False, "error": resp.json()})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    # Porta 100% compatível com Render
+    app.run(host="0.0.0.0", port=10000)
