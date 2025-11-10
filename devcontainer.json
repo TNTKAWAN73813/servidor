@@ -2,5 +2,12 @@
   "name": "API Minecraft",
   "image": "mcr.microsoft.com/vscode/devcontainers/python:3.11",
   "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": {
+      "label": "API-NLS",
+      "onAutoForward": "openPreview",
+      "visibility": "public"
+    }
+  },
   "postStartCommand": "python3 /workspaces/servidor/api.py"
 }

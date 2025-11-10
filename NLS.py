@@ -8,42 +8,49 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Tempo de espera para o playit criar o túnel
+# Tempo de espera máximo para o Playit criar o túnel
 PLAYIT_WAIT_SECONDS = 15
+CRAFTY_SCRIPT = "/workspaces/servidor/minecraft/run_crafty.sh"
+PLAYIT_LOG = "/tmp/playit.log"
 
 
 def start_background(cmd):
-    """Executa um comando em background com nohup (persiste mesmo se o terminal encerrar)."""
+    """Executa um comando em background com nohup."""
     full_cmd = f"nohup {cmd} > /tmp/bg_process.log 2>&1 &"
-    return subprocess.Popen(["bash", "-c", full_cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return subprocess.Popen(["bash", "-c", full_cmd])
 
 
 @app.post("/start")
 def start_server():
     try:
+        if not os.path.exists(CRAFTY_SCRIPT):
+            return jsonify({"status": "error", "message": f"Script não encontrado: {CRAFTY_SCRIPT}"}), 404
+
         # 1️⃣ Inicia o Crafty Controller
-        crafty_script = "/workspaces/servidor/minecraft/run_crafty.sh"
-        if not os.path.exists(crafty_script):
-            return jsonify({"status": "error", "message": f"Script não encontrado: {crafty_script}"}), 404
+        start_background(f"bash {CRAFTY_SCRIPT}")
 
-        start_background(f"bash {crafty_script}")
-
-        # 2️⃣ Inicia o Playit (mantém em background com nohup)
+        # 2️⃣ Inicia o Playit (túnel)
         start_background("playit")
 
-        # 3️⃣ Aguarda o Playit gerar o túnel
+        # 3️⃣ Aguarda até Playit gerar o túnel ou tempo esgotar
         ip_text = "Aguardando endereço do Playit..."
         for _ in range(PLAYIT_WAIT_SECONDS):
             time.sleep(1)
-            if os.path.exists("/tmp/playit.log"):
-                with open("/tmp/playit.log", "r", encoding="utf-8", errors="ignore") as f:
-                    log = f.read()
+            if os.path.exists(PLAYIT_LOG):
+                try:
+                    log = open(PLAYIT_LOG, "r", encoding="utf-8", errors="ignore").read()
                     m = re.search(r"([\w\.-]+\.playit\.gg:\d+)", log)
                     if m:
                         ip_text = m.group(1)
                         break
+                except Exception:
+                    pass
 
-        return jsonify({"status": "ok", "message": "Servidor iniciado, aguarde alguns segundos...", "ip": ip_text})
+        return jsonify({
+            "status": "ok",
+            "message": "Servidor iniciado, aguarde alguns segundos...",
+            "ip": ip_text
+        })
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -61,11 +68,11 @@ def status():
     except Exception:
         running = False
 
-    # Busca IP do Playit (se já estiver ativo)
+    # Verifica IP do Playit
     ip = ""
-    if os.path.exists("/tmp/playit.log"):
+    if os.path.exists(PLAYIT_LOG):
         try:
-            log = open("/tmp/playit.log", "r", encoding="utf-8", errors="ignore").read()
+            log = open(PLAYIT_LOG, "r", encoding="utf-8", errors="ignore").read()
             m = re.search(r"([\w\.-]+\.playit\.gg:\d+)", log)
             if m:
                 ip = m.group(1)
@@ -76,6 +83,5 @@ def status():
 
 
 if __name__ == "__main__":
-    # Garante que o container não pare por inatividade
-    print("🌍 API iniciada em http://0.0.0.0:8080")
+    print("🌍 API-NLS iniciada em http://0.0.0.0:8080")
     app.run(host="0.0.0.0", port=8080)
