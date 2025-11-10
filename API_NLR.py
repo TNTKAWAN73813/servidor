@@ -11,7 +11,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})  # ✅ libera acesso de qualquer 
 # ⚙️ Configurações
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 CODESPACE_NAME = "fuzzy-potato-x54rxp4499wrh9q7v"  # nome exato do seu Codespace
-NLS_URL = "https://fuzzy-potato-x54rxp4499wrh9q7v-8080.app.github.dev"  # URL do NLS dentro do Codespace
+NLS_URL = "https://fuzzy-potato-x54rxp4499wrh9q7v-8080.app.github.dev/status"  # URL do NLS dentro do Codespace
 
 HEADERS = {
     "Authorization": f"token {GITHUB_TOKEN}",

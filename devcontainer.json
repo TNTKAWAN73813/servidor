@@ -9,11 +9,16 @@
       "visibility": "public"
     }
   },
-  "postStartCommand": "bash /workspaces/servidor/start_nls.sh",
+  "postStartCommand": "python3 /workspaces/servidor/minecraft/API-NLS.py",
   "customizations": {
-    "vscode": {
-      "extensions": ["ms-python.python"]
+    "codespaces": {
+      "openFiles": ["minecraft/API-NLS.py"]
     }
   },
-  "remoteUser": "vscode"
+  "hostRequirements": {
+    "cpus": 1,
+    "memory": "1gb"
+  },
+  "features": {},
+  "runArgs": ["--env", "GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN=app.github.dev"]
 }
