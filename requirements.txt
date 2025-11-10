@@ -1,4 +1,4 @@
 flask==3.1.2
 requests==2.32.5
 gunicorn==23.0.0
-flask-cors==3.1.13
+flask-cors==3.0.10
