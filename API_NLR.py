@@ -1,81 +1,54 @@
-from flask import Flask, request, jsonify
-import os
+from flask import Flask, jsonify
+from flask_cors import CORS
 import requests
+import os
 import time
 
 app = Flask(__name__)
+CORS(app)
 
-# Token do GitHub (variável de ambiente no Railway)
+# Configurações
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-CODESPACE_NAME = "servidor"  # o nome do Codespace no GitHub
-REPO = "TNTKAWAN73813/servidor"  # seu repo
+CODESPACE_NAME = "fuzzy-potato-x54rxp4499wrh9q7v"  # nome do seu Codespace
+NLS_URL = "https://fuzzy-potato-x54rxp4499wrh9q7v-8080.app.github.dev/"   # URL interna da NLS dentro do Codespace
 
-# URL da NLS dentro do Codespace
-NLS_URL = "https://fuzzy-potato-x54rxp4499wrh9q7v-8080.app.github.dev/"  # exemplo, ajustar conforme NLS
+HEADERS = {
+    "Authorization": f"token {GITHUB_TOKEN}",
+    "Accept": "application/vnd.github+json"
+}
 
+def start_codespace_and_nls():
+    # 1️⃣ Liga o Codespace
+    start_url = f"https://api.github.com/user/codespaces/{CODESPACE_NAME}/start"
+    r = requests.post(start_url, headers=HEADERS)
+    if r.status_code not in (200, 201, 204):
+        return False, r.json()
 
-def is_codespace_running():
-    """Verifica se o Codespace está ativo via API GitHub"""
-    url = f"https://api.github.com/user/codespaces"
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        return False
-    codespaces = response.json().get("codespaces", [])
-    for cs in codespaces:
-        if cs["repository"]["full_name"] == REPO:
-            if cs["state"] == "Available":
-                return True
-    return False
+    # 2️⃣ Espera o Codespace ficar pronto
+    time.sleep(15)  # ajustar se necessário
 
-
-def start_codespace():
-    """Liga o Codespace via GitHub API"""
-    url = f"https://api.github.com/user/codespaces"
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    # 3️⃣ Executa comando dentro do Codespace para iniciar a NLS
+    exec_url = f"https://api.github.com/user/codespaces/{CODESPACE_NAME}/commands"
     data = {
-        "repository": REPO
+        "command": "bash /workspaces/servidor/start_nls.sh"
     }
-    response = requests.post(url, json=data, headers=headers)
-    return response.status_code == 201 or response.status_code == 200
+    r2 = requests.post(exec_url, headers=HEADERS, json=data)
+    if r2.status_code not in (200, 201):
+        return False, r2.json()
 
+    # 4️⃣ Retorna sucesso e URL da NLS
+    return True, {"nls_url": NLS_URL}
 
-def call_nls():
-    """Chama a NLS dentro do Codespace para iniciar Minecraft + túnel"""
-    try:
-        res = requests.post(NLS_URL, timeout=10)
-        if res.status_code == 200:
-            return res.json()
-        else:
-            return {"running": False, "error": "NLS retornou erro"}
-    except Exception as e:
-        return {"running": False, "error": str(e)}
+@app.post("/start-codespace")
+def start_codespace_endpoint():
+    if not GITHUB_TOKEN:
+        return jsonify({"success": False, "error": "Token não configurado"}), 400
 
-
-@app.route("/start-codespace", methods=["POST"])
-def start():
-    # Verifica se o Codespace já está ligado
-    if not is_codespace_running():
-        started = start_codespace()
-        if not started:
-            return jsonify({"success": False, "error": "Falha ao iniciar Codespace"})
-
-        # Aguardar Codespace ficar disponível
-        for _ in range(30):  # até 150s
-            time.sleep(5)
-            if is_codespace_running():
-                break
-        else:
-            return jsonify({"success": False, "error": "Timeout Codespace"})
-
-    # Chama a NLS
-    nls_status = call_nls()
-
-    return jsonify({
-        "success": True,
-        "server_info": nls_status
-    })
-
+    success, info = start_codespace_and_nls()
+    if success:
+        return jsonify({"success": True, "nls_url": info["nls_url"]})
+    else:
+        return jsonify({"success": False, "error": info})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
