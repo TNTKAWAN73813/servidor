@@ -6,13 +6,13 @@ import os
 import requests
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})  # Libera acesso de qualquer origem
+CORS(app, resources={r"/*": {"origins": "*"}})
 
-# ⚙️ Configurações
+# Configurações
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-CODESPACE_NAME = "fuzzy-potato-x54rxp4499wrh9q7v"  # nome do seu Codespace
-NLS_URL = "https://fuzzy-potato-x54rxp4499wrh9q7v-8080.app.github.dev"  # URL da NLS dentro do Codespace
-STARTUP_SCRIPT = "/workspaces/servidor/startup.sh"  # script que inicia Crafty/Minecraft
+CODESPACE_NAME = "fuzzy-potato-x54rxp4499wrh9q7v"
+NLS_URL = "https://fuzzy-potato-x54rxp4499wrh9q7v-8080.app.github.dev"
+STARTUP_SCRIPT = "/workspaces/servidor/startup.sh"
 
 HEADERS = {
     "Authorization": f"token {GITHUB_TOKEN}",
@@ -20,29 +20,35 @@ HEADERS = {
 }
 
 def start_codespace_and_nls():
-    # 1️⃣ Tenta ligar o Codespace via GitHub API
+    # 1️⃣ Liga o Codespace via GitHub API
     start_url = f"https://api.github.com/user/codespaces/{CODESPACE_NAME}/start"
     r = requests.post(start_url, headers=HEADERS)
 
     if r.status_code == 409:
-        # Codespace já está rodando, apenas retorna a NLS
+        # Codespace já ativo
         print("Codespace já ativo, pulando start...")
-        return True, {"nls_url": NLS_URL}
-
-    if r.status_code not in (200, 201, 204):
+    elif r.status_code not in (200, 201, 204):
         return False, r.json()
+    else:
+        time.sleep(20)  # espera Codespace subir
 
-    # 2️⃣ Espera o Codespace subir
-    time.sleep(20)
-
-    # 3️⃣ Executa startup.sh para iniciar Crafty/Minecraft
+    # 2️⃣ Executa startup.sh via bash
     try:
         subprocess.Popen(["bash", STARTUP_SCRIPT])
     except Exception as e:
         return False, {"error": f"Erro ao executar startup.sh: {e}"}
 
-    # 4️⃣ Retorna a URL do NLS
-    return True, {"nls_url": NLS_URL}
+    # 3️⃣ Espera NLS/API do Minecraft responder
+    print("⏳ Aguardando NLS/API responder...")
+    for _ in range(15):  # tenta por ~45s
+        try:
+            res = requests.get(NLS_URL + "/status", timeout=2)
+            if res.ok:
+                return True, {"nls_url": NLS_URL}
+        except:
+            time.sleep(3)
+
+    return False, {"error": "NLS não respondeu após 45s"}
 
 # --- Rotas ---
 @app.post("/start-codespace")
@@ -60,8 +66,5 @@ def start_codespace_endpoint():
 def home():
     return jsonify({"status": "ok", "message": "API-NLR ativa!"})
 
-# --- Execução ---
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
-
-

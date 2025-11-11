@@ -26,9 +26,9 @@ playit > /tmp/playit.log 2>&1 &
 PLAYIT_PID=$!
 echo "📌 Playit PID: $PLAYIT_PID"
 
-# 5️⃣ Espera Playit/NLS inicializarem
+# 5️⃣ Espera Playit/NLS ficarem prontos
 echo "⏳ Aguardando Playit e NLS ficarem prontos..."
-sleep 15  # tempo estimado para criar túnel
+sleep 15
 
 # 6️⃣ Iniciar Crafty Controller (servidor Minecraft)
 echo "🔧 Iniciando Crafty Controller..."
@@ -36,7 +36,19 @@ bash /workspaces/servidor/minecraft/run_crafty.sh > /tmp/run_crafty.log 2>&1 &
 CRAFTY_PID=$!
 echo "📌 Crafty PID: $CRAFTY_PID"
 
-# 7️⃣ Mensagem final
+# 7️⃣ Verifica se Crafty subiu
+echo "⏳ Verificando se Crafty está ativo..."
+TRIES=0
+while ! pgrep -f run_crafty.sh >/dev/null; do
+  sleep 3
+  TRIES=$((TRIES+1))
+  if [ $TRIES -ge 10 ]; then
+    echo "❌ Crafty não iniciou após 30s"
+    exit 1
+  fi
+done
+
+# 8️⃣ Mensagem final
 echo "✅ Todos os serviços foram iniciados!"
 echo "📜 Logs disponíveis em:"
 echo " - /tmp/run_crafty.log"
