@@ -1,106 +1,91 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 import subprocess
+import socket
+import threading
+import time
 import os
 import json
-import requests
-import socket
-import time
 
 app = Flask(__name__)
 CORS(app)
 
-# --- Configurações ---
 SERVER_NAME = "Fsntjava"
-TUNNEL_FILE = "/workspaces/servidor/minecraft/tunnel.json"
 MINECRAFT_PORT = 25565
+TUNNEL_FILE = "/workspaces/servidor/minecraft/tunnel.json"
+CHECK_INTERVAL = 2  # segundos entre checagens
 
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-CODESPACE_NAME = "fuzzy-potato-x54rxp4499wrh9q7v"
-NLR_URL = "https://web-production-fefbf.up.railway.app/start-codespace"
+# Status global
+status_data = {
+    "crafty_running": False,
+    "minecraft_online": False,
+    "tunnel_ready": False,
+    "ip": "",
+    "message": "Carregando status..."
+}
 
 # --- Funções ---
 def is_crafty_running():
-    """Verifica se o Crafty está rodando"""
     try:
         output = subprocess.check_output("pgrep -f crafty", shell=True)
         return bool(output)
     except subprocess.CalledProcessError:
         return False
 
-def is_minecraft_online(ip, port):
-    """Tenta conectar no Minecraft para verificar se está realmente online"""
+def is_minecraft_online():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(1)
-        s.connect((ip, port))
+        s.connect(("127.0.0.1", MINECRAFT_PORT))
         s.close()
         return True
     except:
         return False
 
-def get_minecraft_ip():
-    """Retorna IP do Minecraft via Playit ou IP público"""
+def get_tunnel_ip():
     if os.path.exists(TUNNEL_FILE):
         try:
             with open(TUNNEL_FILE) as f:
                 data = json.load(f)
-            return data['host']
+            return data.get('host', '')
         except:
             pass
-    try:
-        return requests.get("https://api.ipify.org").text
-    except:
-        return ""
+    return ""
 
-def start_codespace_and_nls():
-    """Liga o Codespace via NLR caso esteja desligado"""
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github+json"
-    }
-    start_url = f"https://api.github.com/user/codespaces/{CODESPACE_NAME}/start"
+def monitor_status():
+    while True:
+        crafty = is_crafty_running()
+        minecraft_online = is_minecraft_online() if crafty else False
+        tunnel_ip = get_tunnel_ip()
+        tunnel_ready = bool(tunnel_ip)
 
-    try:
-        r = requests.post(start_url, headers=headers)
-        if r.status_code not in (200, 201, 204):
-            return False, r.json()
-    except Exception as e:
-        return False, str(e)
+        if crafty and minecraft_online:
+            message = "Servidor Minecraft Online ✅"
+        elif crafty:
+            message = "Crafty Online 🌟\nLigando Minecraft... ⏳"
+        else:
+            message = "Crafty Controller desligado ❌"
 
-    # Espera alguns segundos até Codespace e NLS estarem prontos
-    time.sleep(20)
-    return True, f"https://{CODESPACE_NAME}-8080.app.github.dev"
+        status_data['crafty_running'] = crafty
+        status_data['minecraft_online'] = minecraft_online
+        status_data['tunnel_ready'] = tunnel_ready
+        status_data['ip'] = f"{tunnel_ip}:{MINECRAFT_PORT}" if tunnel_ready else ""
+        status_data['message'] = message
 
-# --- Endpoints ---
+        time.sleep(CHECK_INTERVAL)
+
+# Endpoint de status
 @app.route("/status")
 def status():
-    crafty_running = is_crafty_running()
-    ip = get_minecraft_ip()
-    minecraft_online = False
-
-    if crafty_running and ip:
-        minecraft_online = is_minecraft_online(ip, MINECRAFT_PORT)
-
     return jsonify({
-        "running": minecraft_online,
+        "running": status_data['minecraft_online'],
         "server_name": SERVER_NAME,
-        "ip": f"{ip}:{MINECRAFT_PORT}" if minecraft_online else ""
+        "ip": status_data['ip'] or "127.0.0.1:25565",
+        "message": status_data['message']
     })
 
-@app.route("/start-minecraft", methods=["POST"])
-def start_minecraft():
-    """Liga Codespace/NLS e retorna info inicial"""
-    success, data = start_codespace_and_nls()
-    if not success:
-        return jsonify({"success": False, "error": data}), 500
+# Inicia monitoramento
+threading.Thread(target=monitor_status, daemon=True).start()
 
-    return jsonify({
-        "success": True,
-        "nls_url": data,
-        "message": "Codespace/NLS iniciado. Minecraft pode demorar alguns segundos para subir."
-    })
-
-# --- Execução ---
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
