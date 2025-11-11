@@ -1,66 +1,77 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
+import requests
+import os
 import subprocess
 import time
-import os
-import requests
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Configurações
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 CODESPACE_NAME = "fuzzy-potato-x54rxp4499wrh9q7v"
-NLS_URL = "https://fuzzy-potato-x54rxp4499wrh9q7v-8080.app.github.dev"
-STARTUP_SCRIPT = "/workspaces/servidor/startup.sh"
+NLS_URL = "http://127.0.0.1:8080"  # dentro do Codespace
 
 HEADERS = {
     "Authorization": f"token {GITHUB_TOKEN}",
     "Accept": "application/vnd.github+json"
 }
 
-def start_codespace_and_nls():
-    # 1️⃣ Liga o Codespace via GitHub API
+def start_codespace():
+    """Liga o Codespace via GitHub API"""
     start_url = f"https://api.github.com/user/codespaces/{CODESPACE_NAME}/start"
     r = requests.post(start_url, headers=HEADERS)
-
-    if r.status_code == 409:
-        # Codespace já ativo
-        print("Codespace já ativo, pulando start...")
-    elif r.status_code not in (200, 201, 204):
-        return False, r.json()
+    if r.status_code in (200, 201, 204):
+        return True
+    elif r.status_code == 409:
+        # Codespace já estava rodando
+        return True
     else:
-        time.sleep(20)  # espera Codespace subir
+        return False, r.json()
 
-    # 2️⃣ Executa startup.sh via bash
-    try:
-        subprocess.Popen(["bash", STARTUP_SCRIPT])
-    except Exception as e:
-        return False, {"error": f"Erro ao executar startup.sh: {e}"}
-
-    # 3️⃣ Espera NLS/API do Minecraft responder
-    print("⏳ Aguardando NLS/API responder...")
-    for _ in range(15):  # tenta por ~45s
+def run_startup():
+    """Executa o startup.sh"""
+    cmd = "/workspaces/servidor/startup.sh"
+    if os.path.exists(cmd):
         try:
-            res = requests.get(NLS_URL + "/status", timeout=2)
-            if res.ok:
-                return True, {"nls_url": NLS_URL}
+            subprocess.Popen(["bash", cmd])
+            return True
+        except Exception as e:
+            return False, str(e)
+    return False, "startup.sh não encontrado"
+
+def wait_nls():
+    """Espera NLS/API responder"""
+    tries = 0
+    while tries < 30:
+        try:
+            r = requests.get(NLS_URL + "/status", timeout=2)
+            if r.ok:
+                return True
         except:
-            time.sleep(3)
+            pass
+        time.sleep(3)
+        tries += 1
+    return False
 
-    return False, {"error": "NLS não respondeu após 45s"}
-
-# --- Rotas ---
 @app.post("/start-codespace")
 def start_codespace_endpoint():
     if not GITHUB_TOKEN:
         return jsonify({"success": False, "error": "Token não configurado"}), 400
 
-    success, info = start_codespace_and_nls()
-    if success:
-        return jsonify({"success": True, "nls_url": info["nls_url"]})
-    else:
-        return jsonify({"success": False, "error": info})
+    success = start_codespace()
+    if not success:
+        return jsonify({"success": False, "error": "Erro ao iniciar Codespace"}), 500
+
+    run_ok = run_startup()
+    if run_ok is not True:
+        return jsonify({"success": False, "error": f"Erro ao executar startup.sh: {run_ok[1]}"}), 500
+
+    nls_ok = wait_nls()
+    if not nls_ok:
+        return jsonify({"success": False, "error": "NLS não respondeu após 90s"}), 500
+
+    return jsonify({"success": True, "nls_url": NLS_URL})
 
 @app.get("/")
 def home():
