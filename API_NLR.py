@@ -37,7 +37,7 @@ def start_codespace_and_nls():
 
     # 3️⃣ Executa startup.sh para iniciar Crafty/Minecraft
     try:
-        subprocess.Popen([STARTUP_SCRIPT])
+        subprocess.Popen(["bash", STARTUP_SCRIPT])
     except Exception as e:
         return False, {"error": f"Erro ao executar startup.sh: {e}"}
 
