@@ -9,10 +9,10 @@
       "visibility": "public"
     }
   },
-  "postStartCommand": "python3 /workspaces/servidor/minecraft/API-NLS.py",
+  "postStartCommand": "python3 /workspaces/servidor/minecraft/api.py",
   "customizations": {
     "codespaces": {
-      "openFiles": ["minecraft/API-NLS.py"]
+      "openFiles": ["minecraft/api.py"]
     }
   },
   "hostRequirements": {
